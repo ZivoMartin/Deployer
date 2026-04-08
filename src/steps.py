@@ -16,10 +16,9 @@ class Deploy(Step):
 
 @dataclass
 class WaitFor(Step):
-    name: str
     port: int
     host: str
     timeout: float
 
     def process(self, backend):
-        backend.wait_for(self.name, self.host, self.port, self.timeout)
+        backend.wait_for(self.host, self.port, self.timeout)

@@ -11,8 +11,3 @@ class Backend(ABC):
     def deploy(self, node, component):
         """Deploy an image to a given node."""
         pass
-
-    @abstractmethod
-    def cleanup(self):
-        """Cleanup the network."""
-        pass

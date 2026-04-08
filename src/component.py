@@ -6,17 +6,23 @@ class Component:
     configuration (replicas, etc.).
     """
 
-    def __init__(self, image, replicas=1, name=None, priority=None, command=None, quiet=False):
+    def __init__(self, image, replicas=1, name=None, priority=None, command=None, stdout=False, stderr=True, ports=None):
         """
         Initialize a Component.
         """
+        self.stdout = stdout
+        self.stderr = stderr
         self.command = command
-        self.priority = priority
+        self.priority = priority or 0
         self.name = image if name is None else name
         self.image = image
         self.replicas = replicas
-        self.quiet = quiet
+        self.ports = ports or {}
+        self.mounting = {}
 
+
+    def mount(self, src, target):
+        self.mounting[src] = target
 
     def after(self):
         return []

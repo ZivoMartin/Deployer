@@ -9,6 +9,3 @@ class DebugBackend(Backend):
     def deploy(self, node, component):
         """Deploy an image to a given node."""
         print(f"[DEPLOY] {image} -> {node}")
-
-    def cleanup(self):
-        print("Cleaning the network.")

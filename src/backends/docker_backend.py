@@ -4,11 +4,12 @@ from docker.errors import NotFound, ImageNotFound, APIError
 
 class DockerBackend(Backend):
 
-    def __init__(self, network_name = "docker_testbed"):
+    def __init__(self, network_name = "docker_testbed", clean_before = False):
         self.network_name = network_name
         self.client = docker.from_env()
         self.image_count = {}
-
+        self.containers = []
+        self.clean_before = clean_before
 
     def setup(self):
         try:
@@ -29,22 +30,7 @@ class DockerBackend(Backend):
         print(f"Removing container {container.name}")
         container.remove(force=True)
 
-    
-    def cleanup(self):
-        try:
-            net = self.client.networks.get(self.network_name)
-            
-            for container_info in net.attrs["Containers"].values():
-                container_id = container_info["Name"]
-                self._remove_one_container(container_id)
-
-            net.remove()
-            print(f"Network '{self.network_name}' removed")
-
-        except NotFound:
-            print(f"[ERROR] Failed to clean the network {self.network_name}, not found.")
-
-    def wait_for(self, name, host, port, timeout):
+    def wait_for(self, host, port, timeout):
         import time
 
         deadline = time.time() + timeout
@@ -62,6 +48,7 @@ class DockerBackend(Backend):
         name = component.name
         image = component.image
         command = component.command
+        ports = component.ports
 
         if name is None:
             base_name = f"{image}-{node}"
@@ -70,21 +57,34 @@ class DockerBackend(Backend):
             self.image_count[base_name] = count + 1
         
         try:
+            self._remove_one_container(name)
+        except NotFound:
+            pass
+
+        try:
+            volumes = {
+                k: { "bind": v, "mode": "ro" }
+                for k, v in component.mounting.items()
+            }
+
             container = self.client.containers.run(
                 image,
                 detach=True,
                 network=self.network_name,
                 labels={"node": node},
                 name=name,
-                command=command
+                command=command,
+                ports=ports,
+                volumes=volumes
             )
+            self.containers.append(name)
 
-            if not component.quiet:
+            if component.stderr or component.stdout:
                 import threading
                 def stream_logs(container):
-                    for line in container.logs(stream=True, stderr=True, stdout=False):
+                    for line in container.logs(stream=True, stderr=component.stderr, stdout=component.stdout):
                         print(line.decode(), end="")
-
+     
                 threading.Thread(target=stream_logs, args=(container,)).start()
 
         except ImageNotFound:

@@ -2,18 +2,18 @@ from steps import WaitFor
 from component import Component
 
 class Mosquitto(Component):
-    def __init__(self, name=None, host="localhost", port=1883, timeout=10, quiet=False):
+    def __init__(self, name=None, host=None, port=1883, timeout=10):
         super().__init__(
             image="eclipse-mosquitto",
             priority=1,
-            replicas=1,
-            name="mosquitto" if name is None else name,
-            quiet=quiet
+            name= name or "mosquitto",
+            stderr=False,
+            stdout=False
         )
-        self.host = self.name
+        self.host = host or self.name
         self.port = port
         self.timeout = timeout
 
         
     def after(self):
-        return [WaitFor(self.name, self.port, self.host, self.timeout)]
+        return [WaitFor(self.port, self.host, self.timeout)]

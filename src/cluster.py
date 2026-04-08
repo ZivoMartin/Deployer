@@ -14,13 +14,12 @@ class Cluster:
     - Executing the deployment
     """
 
-    def __init__(self, backend=DockerBackend(), clean_after=False):
+    def __init__(self, backend=DockerBackend(clean_before=True)):
         """Initialize an empty cluster."""
         self.backend = backend
         self.node_count = 0
         self.components = []
-        self.clean_after = clean_after
-
+        
     def allocate(self, n):
         """
         Allocate nodes in the cluster.
@@ -40,10 +39,10 @@ class Cluster:
         return self.backend.allocate_nodes(self.node_count)
 
     def get_priority_sorted_components(self):
-        return sorted(
+        return reversed(sorted(
             self.components,
             key=lambda x: (x.priority is None, x.priority if x.priority is not None else 0)
-        )
+        ))
     
     def _build_plan(self):
         """
@@ -90,8 +89,3 @@ class Cluster:
         """
         plan = self._build_plan()
         self._execute(plan)
-        if self.clean_after:
-            self.backend.cleanup()
-
-    def cleanup(self):
-        self.backend.cleanup()
