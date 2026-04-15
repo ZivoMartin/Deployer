@@ -24,11 +24,20 @@ class Component:
     def mount(self, src, target):
         self.mounting[src] = target
 
+    def set_priority(self, priority):
+        self.priority = priority
+
     def after(self):
         return []
 
     def before(self):
         return []
+
+    def set_logs(self, stderr=None, stdout=None):
+        if not stderr is None:
+            self.stderr = stderr
+        if not stdout is None:
+            self.stdout = stdout
 
     @staticmethod
     def parse_compose(content: str):

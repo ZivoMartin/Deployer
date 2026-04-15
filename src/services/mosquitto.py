@@ -5,7 +5,6 @@ class Mosquitto(Component):
     def __init__(self, name=None, host=None, port=1883, timeout=10):
         super().__init__(
             image="eclipse-mosquitto",
-            priority=1,
             name= name or "mosquitto",
             stderr=False,
             stdout=False
