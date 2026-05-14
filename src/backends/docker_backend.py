@@ -34,16 +34,43 @@ class DockerBackend(Backend):
         import time
 
         deadline = time.time() + timeout
-        container = self.client.containers.get(host)
 
         while time.time() < deadline:
-            exit_code, _ = container.exec_run(f"nc -z localhost {port}")
-            if exit_code == 0:
-                return
+            try:
+                container = self.client.containers.get(host)
+                exit_code, _ = container.exec_run(f"nc -z localhost {port}")
+                if exit_code == 0:
+                    return
+            except NotFound:
+                pass
             time.sleep(0.2)
+        raise RuntimeError(f"Timeout waiting for {host}:{port}")
 
+    def log_container_runtime(self, container, name, component):
+        import threading
+        import logging
 
+        def stream_logs(container, name, component):
+            logger = logging.getLogger(name)
+            try:
+                for line in container.logs(
+                    stream=True,
+                    stderr=component.stderr,
+                    stdout=component.stdout
+                ):
+                    logger.info(line.decode().strip())
+            except Exception as e:
+                logger.error(f"log stream crashed: {e}")
+
+        threading.Thread(
+            target=stream_logs,
+            args=(container, name, component),
+            daemon=True
+        ).start()
+
+            
     def deploy(self, component, node):
+
         """Deploy an image to a given node."""
         name = component.name
         image = component.image
@@ -80,16 +107,12 @@ class DockerBackend(Backend):
             self.containers.append(name)
 
             if component.stderr or component.stdout:
-                import threading
-                def stream_logs(container):
-                    for line in container.logs(stream=True, stderr=component.stderr, stdout=component.stdout):
-                        print(line.decode(), end="")
-     
-                threading.Thread(target=stream_logs, args=(container,)).start()
+                self.log_container_runtime(container, name, component)
 
-        except ImageNotFound:
-            print(f"[ERROR] Image '{image}' not found.")
-            return None
+        except ImageNotFound as e:
+            raise RuntimeError(f"Image '{image}' not found for component '{name}'") from e
+
         except APIError as e:
-            print(f"[ERROR] Docker API error while deploying '{name}': {e.explanation}")
-            return None
+            raise RuntimeError(
+                f"Docker API error while deploying '{name}': {e.explanation}"
+            ) from e

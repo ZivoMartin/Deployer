@@ -1,11 +1,11 @@
-from steps import WaitFor
+from steps import WaitFor, Deploy
 from component import Component
 
 class Mosquitto(Component):
-    def __init__(self, name=None, host=None, port=1883, timeout=10):
+    def __init__(self, name="mosquitto", host=None, port=1883, timeout=10):
         super().__init__(
             image="eclipse-mosquitto",
-            name= name or "mosquitto",
+            name= name,
             stderr=False,
             stdout=False
         )
@@ -13,6 +13,5 @@ class Mosquitto(Component):
         self.port = port
         self.timeout = timeout
 
-        
-    def after(self):
-        return [WaitFor(self.port, self.host, self.timeout)]
+    def deployment_plan(self, node):
+        return [Deploy(self, node), WaitFor(self.port, self.host, self.timeout)]

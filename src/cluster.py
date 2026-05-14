@@ -1,5 +1,4 @@
 from component import Component
-from steps import Deploy
 from backends.debug_backend import DebugBackend
 from backends.docker_backend import DockerBackend
 
@@ -14,12 +13,23 @@ class Cluster:
     - Executing the deployment
     """
 
-    def __init__(self, backend=DockerBackend(clean_before=True)):
+    def __init__(self, backend=DockerBackend(clean_before=True), setup_logging=True):
         """Initialize an empty cluster."""
         self.backend = backend
         self.node_count = 0
         self.components = []
         
+        if setup_logging:
+            self.setup_logging()
+
+    def setup_logging(self):
+        import logging
+        if not logging.getLogger().hasHandlers():
+            logging.basicConfig(
+                level=logging.INFO,
+                format="[%(name)s] %(message)s"
+            )
+
     def allocate(self, n):
         """
         Allocate nodes in the cluster.
@@ -38,11 +48,38 @@ class Cluster:
         """
         return self.backend.allocate_nodes(self.node_count)
 
-    def get_priority_sorted_components(self):
-        return reversed(sorted(
-            self.components,
-            key=lambda x: (x.priority is None, x.priority if x.priority is not None else 0)
-        ))
+
+    def get_sorted_components(self):
+        """
+        Return a topological sort of the components based on the dependency graph.
+        Fail if detects a cycle.
+        """
+
+        result = []
+        state = {}
+
+        def visit(comp):
+            name = comp.get_name()
+            s = state.get(name, 0)
+
+            if s == 1:
+                raise RuntimeError(f"Dependency cycle detected involving {name}")
+
+            if s == 2:
+                return
+
+            state[name] = 1
+
+            for dep in comp.get_dependencies():
+                visit(dep)
+
+            state[name] = 2
+            result.append(comp)
+
+        for comp in self.components:
+            visit(comp)
+
+        return result
     
     def _build_plan(self):
         """
@@ -59,16 +96,13 @@ class Cluster:
         plan = []
         i = 0
 
-        components = self.get_priority_sorted_components()
+        components = self.get_sorted_components()
+        print(list(map(lambda c: c.get_name(),components)))
 
         for comp in components:
             for _ in range(comp.replicas):
                 node = nodes[i % n]
-
-                plan.extend(comp.before())
-                plan.append(Deploy(comp, node))
-                plan.extend(comp.after())
-
+                plan.extend(comp.deployment_plan(node))
                 i += 1
 
         return plan

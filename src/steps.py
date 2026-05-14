@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from typing import Callable
 
 class Step(ABC):
     def process(self, backend):
@@ -13,6 +14,12 @@ class Deploy(Step):
     def process(self, backend):
         backend.deploy(self.comp, self.node)
 
+@dataclass
+class Do(Step):
+    action: Callable[[Backend], None]
+
+    def process(self, backend):
+        self.action(backend)
 
 @dataclass
 class WaitFor(Step):
