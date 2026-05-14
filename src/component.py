@@ -1,4 +1,4 @@
-from steps import Deploy
+from steps import Deploy, Workflow
 
 class Component:
     """
@@ -43,8 +43,8 @@ class Component:
         if not stdout is None:
             self.stdout = stdout
 
-    def deployment_plan(self, node):
-        return [Deploy(self, node)]
+    def deployment_workflow(self, node):
+        return Workflow([Deploy(self, node)])
 
     def get_name(self):
         return self.name

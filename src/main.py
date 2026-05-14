@@ -1,4 +1,5 @@
 import os
+import time
 from cluster import Cluster
 from component import Component
 from services.mosquitto import Mosquitto
@@ -6,7 +7,7 @@ from services.kairos import Kairos
 from services.vider import Vider
 from services.resolver import Resolver
 
-cluster = Cluster()
+cluster = Cluster(max_concurency=5)
 
 nodes = cluster.allocate(3)
 
@@ -25,10 +26,10 @@ mosquitto = Mosquitto()
 add_service(mosquitto, False)
 
 resolver = Resolver()
-add_service(Resolver(), True, mosquitto)
+add_service(Resolver(), False, mosquitto)
 
 vider = Vider(backend="no")
-add_service(vider, True, resolver)
+add_service(vider, False, resolver)
 
 add_service(Kairos(), False, mosquitto)
 
@@ -67,6 +68,6 @@ cluster.run()
 
 try:
     while True:
-        pass
+        time.sleep(1)
 except KeyboardInterrupt:
     pass

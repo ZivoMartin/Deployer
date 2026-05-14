@@ -1,6 +1,7 @@
 from component import Component
 from backends.debug_backend import DebugBackend
 from backends.docker_backend import DockerBackend
+from steps import ParallelGroup, Step
 
 class Cluster:
     """
@@ -9,15 +10,16 @@ class Cluster:
     The Cluster is responsible for:
     - Node allocation
     - Collecting components
-    - Building a deployment plan
+    - Building a deployment workflow
     - Executing the deployment
     """
 
-    def __init__(self, backend=DockerBackend(clean_before=True), setup_logging=True):
+    def __init__(self, backend=DockerBackend(clean_before=True), setup_logging=True, max_concurency=None):
         """Initialize an empty cluster."""
         self.backend = backend
         self.node_count = 0
         self.components = []
+        self.max_concurency = max_concurency
         
         if setup_logging:
             self.setup_logging()
@@ -80,12 +82,47 @@ class Cluster:
             visit(comp)
 
         return result
+
+
+    def get_parallel_sorted_components(self):
+        result = {}
+        state = {}
+        comp_map = {}
+
+        def visit(comp):
+            name = comp.get_name()
+            s = state.get(name, 0)
+            
+            if s == 1:
+                raise RuntimeError(f"Dependency cycle detected involving {name}")
+
+            if s == 2:
+                return comp_map[name]
+
+            state[name] = 1
+
+            my_index = 0
+            for parent in comp.get_dependencies():
+                candidate = visit(parent) + 1
+                if candidate > my_index:
+                    my_index = candidate
+
+            if my_index not in result:
+                result[my_index] = []
+
+            comp_map[name] = my_index
+            result[my_index].append(comp)
+            state[name] = 2            
+        
+        for comp in self.components:
+            visit(comp)
+
+        return [result[k] for k in sorted(result)]
     
     def _build_plan(self):
         """
         Build a deployment plan.
-        The plan assigns each component replica to a node
-        using a simple round-robin strategy.
+        The plan assigns each component replica to a node.
         """
         nodes = self._allocate_nodes()
         n = len(nodes)
@@ -93,32 +130,44 @@ class Cluster:
         if n == 0:
             raise ValueError("No nodes allocated")
 
-        plan = []
-        i = 0
+        def build_components_workflow(components, i=0):
+            workflows = []
+            for comp in components:
+                for _ in range(comp.replicas):
+                    node = nodes[i % n]
+                    workflows.append(comp.deployment_workflow(node))
+                    i += 1
+            return (workflows, i)
 
-        components = self.get_sorted_components()
-        print(list(map(lambda c: c.get_name(),components)))
+        if self.max_concurency is not None:
+            launching_rounds = self.get_parallel_sorted_components()
+            i = 0
+            plan = []
+            for components in launching_rounds:
+                (workflows, i) = build_components_workflow(components)
+                plan_round = workflows[0] if len(workflows) == 1 else ParallelGroup(workflows, self.max_concurency)
+                plan.append(plan_round)
 
-        for comp in components:
-            for _ in range(comp.replicas):
-                node = nodes[i % n]
-                plan.extend(comp.deployment_plan(node))
-                i += 1
+            return plan
+        else:
+            components = self.get_sorted_components()
+            (plan, _) = build_components_workflow(components)
 
-        return plan
+            return plan
 
+        
     def _execute(self, plan):
         """
         Execute the deployment plan.
         """
-        for step in plan:
-            step.process(self.backend)
+        for plan_step in plan:
+            plan_step.process(self.backend)
 
     def run(self):
         """
         Run the deployment process.
         This includes:
-        1. Building the deployment plan
+        1. Building the deployment workflow
         2. Executing it
         """
         plan = self._build_plan()

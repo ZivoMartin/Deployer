@@ -93,7 +93,8 @@ class DockerBackend(Backend):
                 k: { "bind": v, "mode": "ro" }
                 for k, v in component.mounting.items()
             }
-
+            
+            print(f"Deploying {name}")
             container = self.client.containers.run(
                 image,
                 detach=True,
